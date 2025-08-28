@@ -1,0 +1,284 @@
+# Custom Plymouth Boot Logo — One‑page Guide
+
+**Goal:** Replace Kali Linux's default boot splash (dragon) with your own image (`mylogo.png`) using a custom Plymouth theme. This single page explains **why**, **what files are created**, an **automated install script**, and **manual step‑by‑step commands** with comments so beginners and coders on GitHub can follow easily.
+
+---
+
+## ⚠️ Important notes before you start
+
+* This changes the **Linux boot splash (Plymouth)** only — **not** the BIOS/UEFI manufacturer logo.
+* The instructions assume Debian/Ubuntu based system (Kali uses Debian packaging). Works on Kali, Debian, Ubuntu derivatives.
+* **You must have sudo/root** access.
+* Replace paths or username if your system differs. Default example uses `$HOME/Pictures/mylogo.png`.
+
+---
+
+## What this will create
+
+```
+/usr/share/plymouth/themes/mylogo/               # custom theme folder
+├─ mylogo.png                                    # your logo image (provided by you)
+├─ mylogo.plymouth                                # theme descriptor
+└─ mylogo.script                                  # plymouth script that draws the logo
+```
+
+And then we will set this theme as the default Plymouth theme and rebuild the initramfs.
+
+---
+
+## Quick manual steps (copy-paste)
+
+> Replace `/home/<your-username>/Pictures/mylogo.png` with the actual path of your logo.
+
+```bash
+# 1) Create theme folder
+sudo mkdir -p /usr/share/plymouth/themes/mylogo
+
+# 2) Copy your image into the new theme folder
+sudo cp /home/$USER/Pictures/mylogo.png /usr/share/plymouth/themes/mylogo/
+
+# 3) Create the .plymouth descriptor (see file content below)
+#    We'll create it as /usr/share/plymouth/themes/mylogo/mylogo.plymouth
+
+# 4) Create the script file (see file content below)
+#    We'll place it as /usr/share/plymouth/themes/mylogo/mylogo.script
+
+# 5) Register and make theme the default (registers alternative and selects it)
+sudo update-alternatives --install /usr/share/plymouth/themes/default.plymouth \
+  default.plymouth /usr/share/plymouth/themes/mylogo/mylogo.plymouth 200
+sudo plymouth-set-default-theme mylogo -R
+
+# 6) Ensure grub boots with quiet splash (recommended)
+sudo sed -i 's/^GRUB_CMDLINE_LINUX_DEFAULT=.*/GRUB_CMDLINE_LINUX_DEFAULT="quiet splash"/' /etc/default/grub
+sudo sed -i 's/^#\?GRUB_GFXMODE=.*/GRUB_GFXMODE=auto/' /etc/default/grub
+# ensure GFXPAYLOAD_LINUX is set to keep
+sudo sed -i '/^GRUB_GFXPAYLOAD_LINUX=/d' /etc/default/grub
+echo 'GRUB_GFXPAYLOAD_LINUX=keep' | sudo tee -a /etc/default/grub
+sudo update-grub
+
+# 7) (Optional) Add your graphics driver module to initramfs modules so framebuffer is available early
+#    Uncomment/change module below depending on GPU. Example for Intel i915:
+echo i915 | sudo tee -a /etc/initramfs-tools/modules
+
+# 8) Rebuild initramfs and reboot
+sudo update-initramfs -u
+sudo reboot
+```
+
+---
+
+## Files — exact content to commit (copy into repo)
+
+### `mylogo.plymouth` (place in `/usr/share/plymouth/themes/mylogo/mylogo.plymouth`)
+
+```ini
+[Plymouth Theme]
+Name=My Logo
+Description=Custom boot logo theme that displays a single centered PNG image
+ModuleName=script
+
+[script]
+ImageDir=/usr/share/plymouth/themes/mylogo
+ScriptFile=/usr/share/plymouth/themes/mylogo/mylogo.script
+```
+
+> The `.plymouth` file tells Plymouth which module to use and where the script/image live.
+
+---
+
+### `mylogo.script` (place in `/usr/share/plymouth/themes/mylogo/mylogo.script`)
+
+```c
+/*
+  Simple Plymouth script to show a centered PNG image on boot.
+  - Keep API simple to maximize compatibility.
+  - Comments below explain each line for students.
+*/
+
+// Load image file from ImageDir (file name must match exactly)
+wallpaper_image = Image("mylogo.png");
+
+// Create a sprite (drawable object) from the image
+wallpaper_sprite = Sprite(wallpaper_image);
+
+// Put the image behind other elements (lower Z = behind). Use negative Z.
+wallpaper_sprite.SetZ(-100);
+
+// Center the image on the screen (uses Window object width/height)
+wallpaper_sprite.SetX((Window.GetWidth() - wallpaper_image.GetWidth()) / 2);
+wallpaper_sprite.SetY((Window.GetHeight() - wallpaper_image.GetHeight()) / 2);
+
+/*
+  Optional: Keep the theme alive until system switches to login.
+  We do not block or loop; Plymouth will handle its lifecycle.
+  If you want animations, see 'Add basic fade-in' section below.
+*/
+```
+
+> **Note:** the `Image()` and `Sprite()` functions are part of Plymouth's script module. Keep file names and paths exact.
+
+---
+
+## Optional: small install script for GitHub (`install.sh`)
+
+Place this script in your repo and instruct users to run `sudo ./install.sh /path/to/mylogo.png`.
+
+```bash
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Simple installer for the mylogo plymouth theme
+# Usage: sudo ./install.sh /path/to/mylogo.png
+
+if [[ $EUID -ne 0 ]]; then
+  echo "Please run as root: sudo $0 /path/to/mylogo.png"
+  exit 1
+fi
+
+SRC_IMAGE=${1:-}
+if [[ -z "$SRC_IMAGE" ]]; then
+  echo "Usage: sudo $0 /path/to/mylogo.png"
+  exit 1
+fi
+
+THEME_DIR=/usr/share/plymouth/themes/mylogo
+mkdir -p "$THEME_DIR"
+cp -v "$SRC_IMAGE" "$THEME_DIR/"
+
+# create .plymouth descriptor
+cat > "$THEME_DIR/mylogo.plymouth" <<'EOF'
+[Plymouth Theme]
+Name=My Logo
+Description=Custom boot logo theme that displays a single centered PNG image
+ModuleName=script
+
+[script]
+ImageDir=/usr/share/plymouth/themes/mylogo
+ScriptFile=/usr/share/plymouth/themes/mylogo/mylogo.script
+EOF
+
+# create script file
+cat > "$THEME_DIR/mylogo.script" <<'EOF'
+wallpaper_image = Image("mylogo.png");
+wallpaper_sprite = Sprite(wallpaper_image);
+wallpaper_sprite.SetZ(-100);
+wallpaper_sprite.SetX((Window.GetWidth() - wallpaper_image.GetWidth()) / 2);
+wallpaper_sprite.SetY((Window.GetHeight() - wallpaper_image.GetHeight()) / 2);
+EOF
+
+# register + set theme, and rebuild initramfs
+update-alternatives --install /usr/share/plymouth/themes/default.plymouth \
+  default.plymouth $THEME_DIR/mylogo.plymouth 200 || true
+plymouth-set-default-theme mylogo -R || true
+
+# recommend grub changes (do not force-edit if user already changed)
+if ! grep -q '^GRUB_CMDLINE_LINUX_DEFAULT="quiet splash"' /etc/default/grub; then
+  sed -i 's/^GRUB_CMDLINE_LINUX_DEFAULT=.*/GRUB_CMDLINE_LINUX_DEFAULT="quiet splash"/' /etc/default/grub || true
+  sed -i 's/^#\?GRUB_GFXMODE=.*/GRUB_GFXMODE=auto/' /etc/default/grub || true
+  sed -i '/^GRUB_GFXPAYLOAD_LINUX=/d' /etc/default/grub || true
+  echo 'GRUB_GFXPAYLOAD_LINUX=keep' | tee -a /etc/default/grub
+  update-grub || true
+fi
+
+# optional: add common Intel KMS module for early framebuffer (safe for Intel users)
+if ! grep -q '^i915$' /etc/initramfs-tools/modules 2>/dev/null; then
+  echo i915 | tee -a /etc/initramfs-tools/modules
+fi
+
+update-initramfs -u
+
+echo "Done. Reboot to test: sudo reboot"
+```
+
+> Make the script executable before publishing: `chmod +x install.sh`.
+
+---
+
+## Resize/optimize your image (recommended)
+
+For best results, make the image reasonably sized (not huge). Use `imagemagick` to resize/strip metadata:
+
+```bash
+# install ImageMagick if needed (run once)
+sudo apt update && sudo apt install -y imagemagick
+
+# resize to 1920x1080 max while preserving aspect ratio, write optimized PNG
+convert /path/to/original.png -resize 1920x1080\> -strip -quality 90 /path/to/mylogo.png
+```
+
+> `\>` ensures ImageMagick resizes only if the image is bigger than the target.
+
+---
+
+## Test the theme without reboot (live test)
+
+```bash
+# Start a plymouth daemon (runs in background)
+sudo plymouthd
+
+# Show splash
+sudo plymouth --show-splash
+
+# Wait 5 seconds to visually confirm
+sleep 5
+
+# Quit plymouth (stops daemon)
+sudo plymouth --quit
+```
+
+If the image appears in the test, the theme files are correct.
+
+---
+
+## Troubleshooting (common failures)
+
+* **Blank / text-only boot (no splash):**
+
+  * Likely framebuffer isn't available early. Ensure you added a KMS driver to `/etc/initramfs-tools/modules` (e.g. `i915`, `amdgpu`, `radeon`, or `nouveau` for open NVIDIA). Re-run `sudo update-initramfs -u`.
+  * Proprietary NVIDIA driver often prevents Plymouth from working. Try using `nouveau` (open driver) or follow distro-specific NVIDIA Plymouth guides.
+
+* **Image not shown:**
+
+  * Check file exists and permissions: `ls -l /usr/share/plymouth/themes/mylogo/mylogo.png` and `sudo chmod 644 /usr/share/plymouth/themes/mylogo/mylogo.png`.
+  * Confirm theme selected: `sudo plymouth-set-default-theme --list` and `sudo plymouth-set-default-theme mylogo -R`.
+  * Verify default alternative: `sudo update-alternatives --display default.plymouth`.
+
+* **Theme shows but is too big/tiny:**
+
+  * Resize the image with ImageMagick (see above).
+
+* **`update-initramfs` errors / fails\`:**
+
+  * Run `sudo update-initramfs -u -k all` and inspect `/var/log/apt/term.log` or `dmesg` for errors.
+
+---
+
+## Reverting to the distro default
+
+```bash
+# List alternatives and pick the distro default (example path shown)
+sudo update-alternatives --config default.plymouth
+# or set a known theme, e.g., kali-logo (if installed)
+sudo plymouth-set-default-theme kali-logo -R
+sudo update-initramfs -u
+sudo reboot
+```
+
+---
+
+## Extra ideas (for advanced students)
+
+* Add a fade-in animation: create a short PNG sequence and animate sprites in `mylogo.script`, or use the `script` module's animation functions (requires reading Plymouth script API). Keep portability in mind.
+* Add a small text caption (use `Text()` primitive) or progress dots under the logo.
+* Package theme as `.deb` for distribution.
+
+---
+
+## License & How to publish on GitHub
+
+* Add this README as `README.md` in your repo and include `install.sh` + `mylogo.plymouth` + `mylogo.script` (do **not** include your actual logo image if it is private; instruct users to place their own `mylogo.png`).
+* Suggested `README` sections: Quick Install, Manual Steps, Troubleshooting — all present in this one-page file.
+
+---
+
+If you want, I can also generate a ready `tar.gz` containing the three theme files (without your private PNG) or produce a polished `mylogo.script` that includes a simple fade-in (but I avoided adding uncertain API calls to keep compatibility).
