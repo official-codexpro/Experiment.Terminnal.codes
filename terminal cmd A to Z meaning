@@ -1,0 +1,52 @@
+<--hello this is A to Z meaning of words in terminal-->
+Letter   Meaning                     Examples
+-------  --------------------------  -----------------------------------------
+a        all                         ls -a          # show all files
+b        block / buffer / backup     ls -b          # escape chars
+                                     cp -b          # backup copy
+c        change / compress / count   chmod -c       # change info
+                                     tar -c         # create archive
+d        directory / debug           ls -d          # list dirs only
+                                     rm -d          # remove empty dir
+e        execute / edit / expr       sed -e         # add expression
+                                     bash -e        # exit on error
+f        force / file                rm -f          # force delete
+                                     tar -f file    # use archive file
+g        group                       ls -g          # show group info
+                                     chown :group   # change group
+h        help / human-readable       ls -h          # human sizes
+                                     du -h          # human sizes
+i        interactive / ignore case   rm -i          # ask before delete
+                                     grep -i        # case-insensitive
+j        jobs                        jobs -l        # list jobs
+k        kill                        kill -9 PID    # kill process
+l        long listing / link         ls -l          # long format
+                                     ln -s file ln  # symlink
+m        mode / modify / mount       chmod -m       # set mode
+                                     mount -m       # mount option
+n        number / no-overwrite       cp -n          # no overwrite
+                                     ls -n          # show UID/GID
+o        output / owner / optimize   ls -o          # list without group
+                                     tar -o         # old format
+p        preserve / parents / port   cp -p          # preserve attrs
+                                     mkdir -p       # make parents
+                                     netstat -p     # show PID/program
+q        quiet (no output)           apt-get -q     # quiet install
+r        recursive / reverse         rm -r          # recursive delete
+                                     sort -r        # reverse sort
+s        silent / summary / size     bash -s        # read stdin
+                                     ls -s          # file size
+                                     du -s          # summary size
+t        time / test / table         ls -t          # sort by time
+                                     tar -t         # list archive
+u        update / user               cp -u          # copy newer only
+                                     chown user:    # change user
+v        verbose (show details)      cp -v          # verbose copy
+                                     mv -v          # verbose move
+w        write / wait                wall           # send message
+                                     w              # who is logged in
+x        extract / execute           tar -x         # extract archive
+                                     chmod +x file  # make executable
+y        assume "yes"                apt-get -y     # auto yes
+z        compress (gzip)             tar -z         # gzip archive
+                                     gzip -9 file   # compress file
